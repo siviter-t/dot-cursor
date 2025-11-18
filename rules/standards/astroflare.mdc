@@ -1,0 +1,547 @@
+---
+description: For Astro x Tailwind v4 projects built on-top of the Cloudflare Adapter
+alwaysApply: false
+---
+# Astroflare
+
+You are an expert in TypeScript, Tailwind, and Astro framework for scalable web development on the Cloudflare platform.
+
+## Key Principles
+- Write concise, technical responses with accurate Astro examples
+- Prioritize static generation and server-side islands with minimal JavaScript
+- Use descriptive variable names and follow Astro's naming conventions
+- **NEVER change the site output without explicit user confirmation** - issues are likely elsewhere in configuration, environment variables, or build process
+- Organize files using Astro's file-based routing system
+- **Native over frameworks**: Prefer native HTML elements (`<dialog>`, `<form>`) and web components over framework-specific solutions when possible. Use framework features only when they provide clear value.
+
+## Project Architecture
+
+### Deployment Target
+- **Cloudflare Workers** with `output: 'static'` and component server islands for server-side rendering
+- Use `server:defer` directive for server islands to optimize performance
+- Cloudflare adapter configured with platformProxy for forms/server actions
+- Trailing slashes always (`trailingSlash: 'always'`) to match Cloudflare Workers behavior
+
+### Example Astro Project Structure
+
+```
+src/
+  ├── components/       # Astro components and custom web elements
+  │   ├── core/         # Reusable core components
+  │   ├── forms/        # Form components with client-side logic
+  │   ├── modals/       # Modal dialogs
+  │   ├── animations/   # Animated components
+  │   │
+  │   └── ...           # Others as needed
+  │
+  ├── layouts/          # Page layouts
+  ├── pages/            # File-based routing
+  ├── actions/          # Server actions (forms, API endpoints)
+  ├── utils/            # Utility code
+  ├── dom/              # DOM-manipulation (if needed)
+  └── styles/           # Global styles
+```
+
+## Component Development
+
+### Astro Components (Primary Pattern)
+- Create `.astro` files for all components - this is the default and preferred approach
+- Implement proper component composition and reusability
+- Use Astro's component props with TypeScript interfaces for data passing
+- Organize components by purpose: `core/` (reusable), `forms/`, `modals/`, `animations/`, `layout/`
+- Keep components focused and single-purpose
+
+### Component Library Pattern
+
+**Prioritize Reusable Components with Minimal Coupling**
+- Always prioritize using concise, reusable components with minimal coupling
+- Use `components/core/` for any reusable components with directory nesting where appropriate
+- Components should be self-contained and composable
+- Avoid tight coupling between components - use props and slots for composition
+
+**Starwind UI for New Component Patterns**
+- For new projects or when a component pattern/type is new to the project (i.e., if a bespoke one or alternative does NOT exist in `core/`)
+- Use [Starwind UI](https://github.com/starwind-ui/starwind-ui) for reusable component patterns
+- **Always ask the user before installing Starwind if it has NOT been installed**
+- Starwind components should be added to `@/components/starwind` directory
+- Reference [Starwind UI AI Guide](https://starwind.dev/llms-full.txt) for detailed usage patterns
+
+**Starwind UI Setup:**
+1. Ensure path aliases are configured in `tsconfig.json`:
+   ```json
+   {
+     "compilerOptions": {
+       "baseUrl": ".",
+       "paths": {
+         "@/*": ["src/*"]
+       }
+     }
+   }
+   ```
+2. If using pnpm, create `.npmrc`:
+   ```
+   auto-install-peers=true
+   node-linker=hoisted
+   lockfile=true
+   ```
+3. Initialize Starwind:
+   ```bash
+   pnpx starwind@latest init
+   # or
+   npx starwind@latest init
+   ```
+4. Import CSS in layout:
+   ```astro
+   ---
+   import "@/styles/starwind.css";
+   ---
+   ```
+5. Add components as needed:
+   ```bash
+   npx starwind@latest add button
+   npx starwind@latest add dialog
+   ```
+6. Import and use components:
+   ```astro
+   ---
+   import { Button } from "@/components/starwind/button";
+   import { Dialog, DialogTrigger, DialogContent } from "@/components/starwind/dialog";
+   ---
+   
+   <Dialog>
+     <DialogTrigger>
+       <Button>Open</Button>
+     </DialogTrigger>
+     <DialogContent>
+       Content here
+     </DialogContent>
+   </Dialog>
+   ```
+
+**Component Decision Tree:**
+1. Check if component exists in `components/core/` - use it
+2. Check if similar pattern exists - extend or compose from existing
+3. If new pattern needed and Starwind has it - use Starwind (ask user first if not installed)
+4. If Starwind doesn't have it or user prefers custom - create in `components/core/` with minimal coupling
+
+### Client-Side Interactivity (Web Components First)
+
+**PRIMARY PATTERN: Custom Web Components**
+- **Use native web components with custom elements as the default for ALL client-side interactivity**
+- Define custom elements in `<script>` tags within Astro components
+- Use `customElements.define()` with guard checks: `if (!customElements.get('element-name'))`
+- Pass server-side data via data attributes (`data-*`) or `dataset` API
+- Use frontmatter variables and `define:vars` for passing server-side data to scripts when needed
+
+**Web Component Pattern Example:**
+```astro
+<custom-element data-config={JSON.stringify(config)}>
+  <slot />
+</custom-element>
+
+<script>
+  class CustomElement extends HTMLElement {
+    connectedCallback() {
+      const config = JSON.parse(this.dataset.config || '{}');
+      // Initialize component logic
+    }
+    
+    disconnectedCallback() {
+      // Cleanup
+    }
+  }
+  
+  if (!customElements.get('custom-element')) {
+    customElements.define('custom-element', CustomElement);
+  }
+</script>
+```
+
+**DOM Utilities Pattern:**
+- Create type-safe DOM helpers in `src/client/dom.ts`
+- Use `getElementById<T>()` and `getElementByQuery<T>()` for type-safe element access
+- Pattern: `getElementById('id', HTMLDialogElement)` returns `HTMLDialogElement | null`
+- Use `getElementByIdOrThrow()` and `getElementByQueryOrThrow()` when element must exist
+
+**Native HTML Elements:**
+- **Prefer native HTML elements**: `<dialog>` for modals, `<form>` for forms, `<details>` for accordions
+- Wrap native elements in custom elements for enhanced behavior when needed
+- Example: `<app-modal>` wraps `<dialog>` to add close button handling
+
+**Form Submission Pattern:**
+- **Use native HTML `<form>` elements** with custom web elements for client-side validation and UX
+- **Use Cloudflare Workers via Astro integration for form actions** - keep the rest of the site static
+- Form actions handled via client-side `fetch()` to `/_actions/[action-name]/` endpoints
+- Server actions run on Cloudflare Workers (via `platformProxy`), keeping static site performance
+- Handle loading states, validation errors, and success states in custom form elements
+
+### React Usage (STRICTLY AVOIDED)
+- **DO NOT use React components or component islands unless explicitly required by the user**
+- Component islands (`client:load`, `client:idle`, `client:visible`) add unnecessary JavaScript bundle size
+- **Default to custom elements and vanilla JavaScript for ALL interactivity**
+- If React is absolutely necessary, confirm with user first and document why
+
+## Routing and Pages
+- Utilize Astro's file-based routing in `src/pages/` directory
+- Implement dynamic routes using `[...slug].astro` syntax
+- Use `getStaticPaths()` for generating static pages with dynamic routes
+
+## Forms and Server Actions
+
+### Form Handling Pattern
+- Use native HTML `<form>` elements with custom web elements for client logic
+- Server actions in `src/actions/` directory using `defineAction()`
+- Form data submitted via `fetch()` to `/_actions/[action-name]/` endpoints
+- Server actions validate with Zod schemas
+- Return JSON responses for 200 responses
+
+### Server Action Structure
+```typescript
+export const myAction = defineAction({
+  accept: 'form',
+  input: zodSchema,
+  handler: async (input, context) => {
+    // Access env via context.locals.runtime.env
+    // Handle form logic
+    // Return { success: true } or throw error
+  }
+});
+```
+
+## Images and Media
+- **Prefer Astro's `<Picture>` component** for images with multiple sizes and formats
+  - **Always specify `formats={['avif','webp']}`** for optimal image delivery with `<Picture>`
+- Use `<Image>` component for standalone images when Picture is not needed
+- Implement lazy loading for images
+
+## Styling
+
+### Tailwind CSS
+- Use Tailwind V4 via `@tailwindcss/vite` plugin
+- Use utility classes extensively in components
+- Leverage responsive utilities (sm:, md:, lg:, etc.)
+- Never use `@apply` directive
+- Define theme in `src/styles/global.css` using `@theme` directive
+- Use CSS custom properties and variables for theming
+- Support dark mode via `@custom-variant dark` with `[data-theme=dark]` selector
+- Use `color-mix()` for dynamic color variations
+
+### Scoped Styles
+- Use Astro's scoped `<style>` tags for component-specific styles
+- Import global styles in layouts when necessary
+- Use inline styles sparingly (e.g., for dynamic values like text-shadow)
+
+## Environment Variables
+- Use `astro:env/client` for client-accessible environment variables
+- Define in `astro.config.mjs` using `envField` for type safety
+- Server-side variables defined in `wrangler.jsonc` vars
+- Use `.dev.vars` for local development secrets (not committed)
+
+## Data Fetching
+
+### Content Collections
+- Use Astro Content Collections with `glob` loader pattern
+- Define collections in `src/content/config.ts` using `defineCollection()`
+- Use `loader: glob({ pattern: '**/*.md', base: './content/blog' })` for file-based content
+- Define Zod schemas for frontmatter validation
+- Access via `getCollection()` and `getEntry()` in pages
+- Use `render()` to get `<Content />` component for markdown rendering
+
+### Static Data
+- Use `Astro.props` for passing data to components
+- Implement `getStaticPaths()` for fetching data at build time
+- Use `Astro.glob()` for working with local files
+- Implement proper error handling and logging
+
+## SEO and Meta Tags
+
+### Comprehensive SEO Structure
+
+Implement a complete SEO structure in your base layout following this pattern:
+
+#### Basic Meta Tags
+- `<meta charset="UTF-8" />`
+- `<meta name="viewport" content="width=device-width, initial-scale=1.0" />`
+- `<meta name="generator" content={Astro.generator} />`
+- `<link rel="alternate" hreflang="en" href={canonicalURL} />`
+
+#### Site Configuration
+- Create `src/config.ts` with individual constants:
+  ```typescript
+  export const SITE_TITLE = 'Your Site Title';
+  export const SITE_SLUG = 'your-site-slug';
+  export const SITE_DOMAIN = 'your-domain.com';
+  
+  export function site_url(): string {
+    return `https://${SITE_DOMAIN}`;
+  }
+  ```
+- Use `site_url()` function to get fully qualified domain URL
+- Do not include description, author, or email in config - these should be page-specific
+
+#### SEO Component (astro-seo)
+- Use `astro-seo` package for Open Graph and Twitter Card tags
+- Configure `title`, `description`, `canonical` URL
+- Set Open Graph `type` to `'article'` for blog posts, `'website'` for pages
+- Include social sharing images (OG image)
+- Format titles: `${title} | ${SITE_TITLE}` (unless title already includes site name)
+
+#### Open Graph Tags
+```astro
+<SEO
+  openGraph={{
+    basic: {
+      title: pageTitle,
+      type: article ? 'article' : 'website',
+      image: socialImage.toString(),
+      url: canonicalURL.toString(),
+    },
+      optional: {
+        description: description,
+        siteName: SITE_SLUG,
+      },
+  }}
+/>
+```
+
+#### Twitter Card Tags
+```astro
+<SEO
+  twitter={{
+    card: 'summary_large_image',
+    title: pageTitle,
+    description: description,
+    image: socialImage.toString(),
+  }}
+/>
+```
+
+#### Schema.org Structured Data
+
+**For Personal Sites:**
+- Use `@graph` array with `Person` and `WebSite` types
+- Include `@id` references for linking entities
+- Add `sameAs` array for social media links
+- Include `knowsAbout` array for topics/expertise
+
+**For Business/Local Business:**
+- Use multiple types: `["Organization", "LocalBusiness", "ProfessionalService"]`
+- Include complete `PostalAddress` with all fields
+- Add `areaServed` array for service areas (cities, regions)
+- Include `serviceType` array
+- Add `hasOfferCatalog` with detailed service offerings
+- Include `sameAs` for social media and external links
+
+#### Additional SEO Meta Tags
+
+**For Local Businesses:**
+- `<meta name="author" content="Author Name" />`
+- `<meta name="keywords" content="comma, separated, keywords" />`
+- `<meta name="geo.region" content="REGION" />`
+- `<meta name="geo.placename" content="City Name" />`
+- `<meta name="geo.position" content="lat;lng" />`
+- `<meta name="ICBM" content="lat, lng" />`
+
+**Robots Control:**
+- Use `noindex` prop in layout to control indexing: `{noindex && <meta name="robots" content="noindex, nofollow" />}`
+
+#### Favicons and Manifest
+- Multiple favicon sizes: `.ico`, `32x32.png`, `16x16.png`, `svg`
+- Apple touch icon: `180x180.png`
+- Web manifest: `site.webmanifest`
+- Apple mobile web app title: `<meta name="apple-mobile-web-app-title" />`
+
+#### Performance Hints
+- DNS prefetch for external resources: `<link rel="dns-prefetch" href="//domain.com" />`
+- Preload critical fonts: `<link rel="preload" as="font" type="font/woff2" href={fontUrl} crossorigin="anonymous" />`
+
+#### Theme and Color Scheme
+- Theme color: `<meta name="theme-color" content="#color" />`
+- Color scheme: `<meta name="color-scheme" content="dark light" />`
+
+#### Sitemap and Robots
+- Configure robots.txt via `astro-robots` integration
+- Generate sitemap via `@astrojs/sitemap` integration
+- Link sitemap in head: `<link rel="sitemap" href="/sitemap-index.xml" />`
+- Disallow `/_actions/` and admin routes in robots.txt
+
+### SEO Checklist
+- [ ] Basic meta tags (charset, viewport, generator, hreflang)
+- [ ] Canonical URLs on all pages
+- [ ] Open Graph tags for social sharing
+- [ ] Twitter Card tags
+- [ ] Schema.org structured data (Person/Organization/LocalBusiness)
+- [ ] Sitemap link in head
+- [ ] Robots meta tag (if needed)
+- [ ] Favicons (multiple sizes + SVG)
+- [ ] Web manifest
+- [ ] Geo-location tags (if local business)
+- [ ] Keywords meta tag (if needed)
+- [ ] Author meta tag
+- [ ] Theme color and color scheme
+- [ ] DNS prefetch for external resources
+- [ ] Font preloading for critical fonts
+
+## Integrations
+
+### Required Integrations
+- `@astrojs/cloudflare` - Cloudflare Workers adapter (required)
+- `@astrojs/sitemap` - Sitemap generation
+- `astro-robots` - Robots.txt generation
+- `@tailwindcss/vite` - Tailwind CSS V4 plugin
+- `astro-seo` - SEO meta tags helper
+
+### Optional Integrations
+- `@astrojs/react` - Only if React is absolutely necessary (avoid if possible)
+- `astro-expressive-code` - Code block syntax highlighting
+- `astro-embed` - Embed components for external content
+
+### Configuration
+- Implement proper configuration in `astro.config.mjs`
+- Pay attention to TypeScript strict mode configuration
+- Use compatibility flags like `nodejs_compat` in wrangler.jsonc
+
+## Testing
+
+### E2E Testing
+- Use Vitest for unit tests
+  - Test files `test/<mirror-src-dir>/file.test.ts`
+- Use Vitest for integration tests
+  - Test files in `test/integration/` directory
+- Use Playwright for automated end-to-end testing
+  - Test files in `test/e2e/` directory
+  - Tests verify form submissions, validation, and user flows
+  - Use test utilities for common patterns
+  - Take screenshots during tests for debugging
+
+### Test Commands
+- `pnpm test` - Run Vitest unit tests
+- `pnpm test:e2e` - Run Playwright tests
+- `pnpm test:e2e:ui` - Run tests in UI mode
+
+### Test Structure
+- Use Page Object Model pattern where appropriate
+- Create reusable test utilities
+- Test both success and error states
+- Verify validation and GDPR requirements
+
+## Code Formatting and Linting
+
+### Prettier and ESLint
+- Config: `printWidth: 120`, `singleQuote: true`, `jsxSingleQuote: true`
+- Run `pnpm format` to format code
+- Run `pnpm format:check` to check code formating
+- Run `pnpm lint` to check code linting
+- Run `pnpm fix` to fix both linting and formatting issues
+
+### TypeScript
+- Use `astro/tsconfigs/strict` as base
+- Enable strict mode with unused locals/parameters checks
+- Use proper type definitions for all functions
+
+## Build and Deployment
+
+### Build Process
+- Run `pnpm build` to build the site
+- Build outputs to `dist/` directory
+- Use `pnpm preview` to preview production build locally
+- Configure `wrangler dev` for local Cloudflare testing
+
+### Deployment
+- NEVER DEPLOY THE CODE YOURSELF
+- Ensure `worker-configuration.d.ts` is generated via `pnpm gen:types`
+
+## Performance Optimization
+
+### View Transitions
+- Use Astro's View Transitions API with `<ClientRouter fallback='none' />` in layouts unless rejected
+- Create custom loading spinners using `<dialog>` elements
+- Listen to `astro:before-preparation`, `astro:after-swap`, and `astro:page-load` events
+- Use `is:inline` scripts for view transition handlers to avoid hydration overhead
+
+### Server Islands (Minimal Use)
+- Use `server:defer` directive only for non-critical server-side rendering
+- Minimize server-side work by deferring where possible
+- **Avoid client islands** - use web components instead for interactivity
+
+### Asset Optimization
+- Use Astro's built-in asset optimization
+- Configure `inlineStylesheets: 'auto'` in build config
+- Use `compressHTML: true` for smaller HTML output
+- Lazy load images with native `loading="lazy"`
+- Preload critical fonts in layout `<head>` sections
+
+## Security
+- Implement `security.checkOrigin: true` in config
+- Validate all form inputs on both client and server
+- Sanitize user input before processing
+- Use proper security headers
+
+## Accessibility
+- Use semantic HTML elements throughout
+- Implement ARIA attributes where necessary
+- Ensure keyboard navigation support
+- Use proper form labels and associations
+- Test with screen readers
+
+## Debugging and Development
+
+### Local Development
+- Use `pnpm dev` for development server
+- View on `http://localhost:4321`
+- Use browser DevTools for debugging
+- Check Cloudflare Workers logs via `wrangler tail`
+
+### When Site Output Changes
+- **NEVER assume the issue is in the output HTML**
+- Check: environment variables (`.dev.vars`, `wrangler.jsonc`)
+- Check: configuration files (`astro.config.mjs`, `wrangler.jsonc`)
+- Check: build process and warnings
+- Ask user to confirm if output changes are expected
+
+## Key Workflow Principles
+- Always run `pnpm gen:types` after environment changes
+- Fix code with `pnpm fix` before committing
+- Test locally with `pnpm preview` before deploying
+- Run E2E tests before major changes
+- Use semantic HTML and proper accessibility patterns
+- Keep server actions type-safe with Zod schemas
+- Log server actions with structured logging
+- **Prioritize web components over React islands for interactivity**
+- **Create reusable components in `core/` directory**
+- **Use type-safe DOM utilities from `src/client/dom.ts`**
+- Refer to Astro's official documentation and this codebase patterns for best practices
+
+## Reusable Component Patterns
+
+### Modal Pattern
+- Use `<dialog>` element wrapped in custom `<app-modal>` component
+- Create `<modal-trigger>` custom element for opening modals
+- Pass modal ID via `data-modal-id` attribute
+- Handle close button and backdrop clicks in custom element
+
+### Form Pattern
+- Create custom form elements (e.g., `<custom-form-element>`) for form logic
+- Handle validation, submission, loading states, and success/error views
+- Use native form validation with custom error display
+- Submit via `fetch()` to server actions
+- Show/hide form views using `hidden` attribute and Tailwind classes
+
+### Loading Spinner Pattern
+- Use `<dialog>` for loading overlays
+- Listen to Astro view transition events
+- Animate with CSS transitions respecting `prefers-reduced-motion`
+- Use CSS custom properties for theming
+
+## Package Management
+- Use pnpm as the package manager
+- Node version: 24.x
+- pnpm version: >=10
+
+## References
+
+- [Astro Documentation](https://docs.astro.build)
+- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
+- [Tailwind CSS v4 Documentation](https://tailwindcss.com/docs)
+
+- [Starwind UI AI Guide](https://starwind.dev/llms-full.txt) - Component library patterns and usage
