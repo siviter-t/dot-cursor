@@ -15,15 +15,17 @@ To add this repository as a submodule to your project:
 **Using the install script:**
 
 ```bash
-# Using wget (defaults to siviter-t, set REPO_ORG env var to override)
-wget https://raw.githubusercontent.com/siviter-t/dot-cursor/main/install.sh -O install.sh && bash install.sh
+# Using curl (defaults to siviter-t/dot-cursor)
+DOTCURSOR_REPO="siviter-t/dot-cursor" sh -c 'curl -LsSf https://raw.githubusercontent.com/$DOTCURSOR_REPO/main/install.sh | sh'
 
-# Using curl (defaults to siviter-t, set REPO_ORG env var to override)
-curl -O https://raw.githubusercontent.com/siviter-t/dot-cursor/main/install.sh && bash install.sh
+# Using wget (defaults to siviter-t/dot-cursor)
+DOTCURSOR_REPO="siviter-t/dot-cursor" sh -c 'wget -qO- https://raw.githubusercontent.com/$DOTCURSOR_REPO/main/install.sh | sh'
 
-# To use a different organization:
-REPO_ORG=your-org bash install.sh
+# To use a different repository:
+DOTCURSOR_REPO="your-org/dot-cursor" sh -c 'curl -LsSf https://raw.githubusercontent.com/$DOTCURSOR_REPO/main/install.sh | sh'
 ```
+
+The script is executed directly from the pipe, so no files are written to disk and no cleanup is needed.
 
 The install script will:
 - Check if `.cursor` directory already exists
