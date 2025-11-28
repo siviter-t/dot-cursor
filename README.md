@@ -1,6 +1,6 @@
 # dot-cursor 🤖
 
-A curated set of reusable rules, commands, and hooks designed to enhance the workflows of Software Engineers (and me).
+A curated set of reusable rules, commands, and hooks designed to enhance the workflows of Software Engineers (and, let's be honest, me primarily).
 
 It's intended to be added as a submodule to other repositories so that a single set may be curated.
 
